@@ -9,49 +9,60 @@ from social_auth.signals import socialauth_not_registered, \
                                 pre_update
 
 
-def get_username(details, user=None, *args, **kwargs):
-    """Return an username for new user. Return current user username
-    if user was given.
-    """
-    if user:
-        return {'username': user.username}
+class GetUsername(object):
+    """Functor to retrieve a username for the user."""
 
-    warn_setting('SOCIAL_AUTH_FORCE_RANDOM_USERNAME', 'get_username')
-    warn_setting('SOCIAL_AUTH_DEFAULT_USERNAME', 'get_username')
-    warn_setting('SOCIAL_AUTH_UUID_LENGTH', 'get_username')
-    warn_setting('SOCIAL_AUTH_USERNAME_FIXER', 'get_username')
+    def __call__(self, details, user=None, *args, **kwargs):
+        """Return an username for new user. Return current user username
+        if user was given.
+        """
+        if user:
+            return {'username': user.username}
 
-    if setting('SOCIAL_AUTH_FORCE_RANDOM_USERNAME'):
-        username = uuid4().get_hex()
-    elif details.get(USERNAME):
-        username = details[USERNAME]
-    elif setting('SOCIAL_AUTH_DEFAULT_USERNAME'):
-        username = setting('SOCIAL_AUTH_DEFAULT_USERNAME')
-        if callable(username):
-            username = username()
-    else:
-        username = uuid4().get_hex()
+        warn_setting('SOCIAL_AUTH_FORCE_RANDOM_USERNAME', 'get_username')
+        warn_setting('SOCIAL_AUTH_DEFAULT_USERNAME', 'get_username')
+        warn_setting('SOCIAL_AUTH_UUID_LENGTH', 'get_username')
+        warn_setting('SOCIAL_AUTH_USERNAME_FIXER', 'get_username')
 
-    uuid_lenght = setting('SOCIAL_AUTH_UUID_LENGTH', 16)
-    username_fixer = setting('SOCIAL_AUTH_USERNAME_FIXER', lambda u: u)
-
-    short_username = username[:USERNAME_MAX_LENGTH - uuid_lenght]
-    final_username = None
-
-    while True:
-        final_username = username_fixer(username)[:USERNAME_MAX_LENGTH]
-
-        try:
-            User.objects.get(username=final_username)
-        except User.DoesNotExist:
-            break
+        if setting('SOCIAL_AUTH_FORCE_RANDOM_USERNAME'):
+            username = uuid4().get_hex()
+        elif details.get(USERNAME):
+            username = details[USERNAME]
+        elif setting('SOCIAL_AUTH_DEFAULT_USERNAME'):
+            username = setting('SOCIAL_AUTH_DEFAULT_USERNAME')
+            if callable(username):
+                username = username()
         else:
-            # User with same username already exists, generate a unique
-            # username for current user using username as base but adding
-            # a unique hash at the end. Original username is cut to avoid
-            # the field max_length.
-            username = short_username + uuid4().get_hex()[:uuid_lenght]
-    return {'username': final_username}
+            username = uuid4().get_hex()
+
+        uuid_length = setting('SOCIAL_AUTH_UUID_LENGTH', 16)
+        username_fixer = setting('SOCIAL_AUTH_USERNAME_FIXER', lambda u: u)
+
+        short_username = username[:USERNAME_MAX_LENGTH - uuid_length]
+        final_username = None
+
+        while True:
+            final_username = username_fixer(username)[:USERNAME_MAX_LENGTH]
+
+            if self.username_exists(final_username):
+                # User with same username already exists, generate a unique
+                # username for current user using username as base but adding
+                # a unique hash at the end. Original username is cut to avoid
+                # the field max_length.
+                username = short_username + uuid4().get_hex()[:uuid_length]
+            else:
+                break
+        return {'username': final_username}
+
+    def username_exists(self, username):
+        """Return True, if the username already exists."""
+        try:
+            User.objects.get(username=username)
+        except User.DoesNotExist:
+            return False
+        return True
+
+get_username = GetUsername()
 
 
 def create_user(backend, details, response, uid, username, user=None, *args,
