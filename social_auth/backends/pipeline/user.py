@@ -51,8 +51,7 @@ class GetUsername(object):
                 # the field max_length.
                 username = short_username + uuid4().get_hex()[:uuid_length]
             else:
-                break
-        return {'username': final_username}
+                return {'username': final_username}
 
     def username_exists(self, username):
         """Return True, if the username already exists."""
